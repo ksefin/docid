@@ -193,6 +193,10 @@ class InvoiceExtractor(BaseExtractor):
         patterns = [
             r'(?i)\b(?:faktura|fv|rachunek|dokumentu)\b\s*(?:vat)?\s*(?:nr|numer)?[:\s]+([A-Z0-9\/\-]*\d+[A-Z0-9\/\-]*)',
             r'(?i)\b(?:nr|numer)\b\s*(?:faktury|fv|dokumentu)?[:\s]+([A-Z0-9\/\-]*\d+[A-Z0-9\/\-]*)',
+            # XML patterns
+            r'<InvoiceNumber>([^<]+)</InvoiceNumber>',
+            r'<invoice_number>([^<]+)</invoice_number>',
+            r'<FakturaNumer>([^<]+)</FakturaNumer>',
         ]
 
         for pattern in patterns:
@@ -210,6 +214,11 @@ class InvoiceExtractor(BaseExtractor):
             r'(?i)data\s*wystawienia[:\s]*(\d{2,4}[.\-/]\d{2}[.\-/]\d{2,4})',
             r'(?i)wystawion[ao]\s*(?:dnia)?[:\s]*(\d{2,4}[.\-/]\d{2}[.\-/]\d{2,4})',
             r'(?i)data[:\s]*(\d{2,4}[.\-/]\d{2}[.\-/]\d{2,4})',
+            # XML patterns
+            r'<IssueDate>([^<]+)</IssueDate>',
+            r'<issue_date>([^<]+)</issue_date>',
+            r'<DataWystawienia>([^<]+)</DataWystawienia>',
+            r'<DataWystaw>([^<]+)</DataWystaw>',
         ]
 
         for pattern in patterns:
@@ -240,6 +249,19 @@ class InvoiceExtractor(BaseExtractor):
         if vat_match:
             vat = self._normalize_amount(vat_match.group(1))
 
+        # XML patterns - check for structured amounts
+        xml_gross_match = re.search(r'<TotalGrossAmount>([^<]+)</TotalGrossAmount>', text)
+        if xml_gross_match:
+            gross = self._normalize_amount(xml_gross_match.group(1))
+
+        xml_net_match = re.search(r'<TotalNetAmount>([^<]+)</TotalNetAmount>', text)
+        if xml_net_match:
+            net = self._normalize_amount(xml_net_match.group(1))
+
+        xml_vat_match = re.search(r'<TotalVATAmount>([^<]+)</TotalVATAmount>', text)
+        if xml_vat_match:
+            vat = self._normalize_amount(xml_vat_match.group(1))
+
         # Jeśli nie znaleziono brutto, weź największą kwotę
         if not gross and detected:
             amounts = [float(self._normalize_amount(a) or 0) for a in detected]
@@ -265,10 +287,16 @@ class ReceiptExtractor(BaseExtractor):
         # Paragon ma specyficzny format - brak NIP nabywcy, wiele pozycji
         has_fiscal_markers = 'fiskaln' in text_lower or 'paragon' in text_lower
         has_ptu = 'ptu' in text_lower or bool(re.search(r'\d+%', text_lower))
+        
+        # XML-specific detection
+        has_xml_receipt_structure = bool(re.search(r'<receipt[^>]*>.*?</receipt>', text_lower, re.DOTALL))
+        has_xml_receipt_elements = bool(re.search(r'<receiptnumber|<cashregister|<fiscal', text_lower))
 
         confidence = min(1.0, keyword_count * 0.15 +
                         (0.3 if has_fiscal_markers else 0) +
-                        (0.2 if has_ptu else 0))
+                        (0.2 if has_ptu else 0) +
+                        (0.4 if has_xml_receipt_structure else 0) +
+                        (0.3 if has_xml_receipt_elements else 0))
 
         return confidence > 0.4, confidence
 
@@ -306,9 +334,16 @@ class ReceiptExtractor(BaseExtractor):
     def _find_total_amount(self, text: str, detected: List[str]) -> Optional[str]:
         """Znajduje kwotę SUMA na paragonie."""
         patterns = [
-            r'suma[:\s]*(\d[\d\s,\.]*\d)',
-            r'razem[:\s]*(\d[\d\s,\.]*\d)',
-            r'do zapłaty[:\s]*(\d[\d\s,\.]*\d)',
+            # Main SUMA (not PTU or VAT) - highest priority
+            r'(?i)suma(?!\s+ptu)(?!\s+vat)[:\s]*(\d[\d\s,\.]*\d)',
+            r'(?i)razem[:\s]*(\d[\d\s,\.]*\d)',
+            r'(?i)do zapłaty[:\s]*(\d[\d\s,\.]*\d)',
+            # XML patterns
+            r'<TotalGrossAmount>([^<]+)</TotalGrossAmount>',
+            # HTML patterns - handle tags that separate label from value
+            r'(?i)<span>suma:</span>\s*<span>(\d[\d\s,\.]*\d)</span>',
+            # Flexible pattern for main SUMA only
+            r'(?i)suma(?!\s+ptu)(?!\s+vat)[^0-9]*?(\d[\d\s,\.]*\d)',
         ]
 
         for pattern in patterns:
@@ -316,9 +351,27 @@ class ReceiptExtractor(BaseExtractor):
             if match:
                 return self._normalize_amount(match.group(1))
 
-        # Fallback - największa kwota
-        if detected:
-            amounts = [float(self._normalize_amount(a) or 0) for a in detected]
+        # Fallback - największa kwota, ale pomijaj kwoty płatności (gotówka, karta)
+        payment_patterns = [
+            r'(?i)gotówka[:\s]*(\d[\d\s,\.]*\d)',
+            r'(?i)karta[:\s]*(\d[\d\s,\.]*\d)',
+            r'(?i)płatność[:\s]*(\d[\d\s,\.]*\d)',
+            r'(?i)<span>gotówka:</span>\s*<span>(\d[\d\s,\.]*\d)</span>',
+        ]
+        
+        # Filter out payment amounts from detected
+        non_payment_amounts = []
+        for amount in detected:
+            is_payment = False
+            for payment_pattern in payment_patterns:
+                if re.search(payment_pattern.replace(r'(\d[\d\s,\.]*\d)', amount), text, re.IGNORECASE):
+                    is_payment = True
+                    break
+            if not is_payment:
+                non_payment_amounts.append(amount)
+        
+        if non_payment_amounts:
+            amounts = [float(self._normalize_amount(a) or 0) for a in non_payment_amounts]
             if amounts:
                 return f"{max(amounts):.2f}"
 
@@ -329,8 +382,8 @@ class ReceiptExtractor(BaseExtractor):
         receipt_num = None
         cash_register = None
 
-        # Numer paragonu
-        receipt_match = re.search(r'(?:nr|numer)\s*(?:paragonu)?[:\s]*(\d+)', text, re.IGNORECASE)
+        # Numer paragonu - capture full receipt number with slashes
+        receipt_match = re.search(r'(?:nr|numer)\s*(?:paragonu)?[:\s]*([A-Z0-9\/\-]+)', text, re.IGNORECASE)
         if receipt_match:
             receipt_num = receipt_match.group(1)
 
@@ -338,6 +391,23 @@ class ReceiptExtractor(BaseExtractor):
         cash_match = re.search(r'(?:kasa|stanowisko)[:\s]*(\d+)', text, re.IGNORECASE)
         if cash_match:
             cash_register = cash_match.group(1)
+
+        # XML patterns
+        if not receipt_num:
+            xml_receipt_match = re.search(r'<ReceiptNumber>([^<]+)</ReceiptNumber>', text)
+            if xml_receipt_match:
+                receipt_num = xml_receipt_match.group(1)
+
+        if not cash_register:
+            xml_cash_match = re.search(r'<CashRegisterNumber>([^<]+)</CashRegisterNumber>', text)
+            if xml_cash_match:
+                cash_register = xml_cash_match.group(1)
+
+        # If receipt number already contains cash register number, don't duplicate
+        if receipt_num and cash_register:
+            # Check if cash_register is already part of receipt_num
+            if cash_register in receipt_num:
+                cash_register = None
 
         return receipt_num, cash_register
 

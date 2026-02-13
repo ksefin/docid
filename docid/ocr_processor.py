@@ -111,6 +111,14 @@ class BaseOCRProcessor(ABC):
             r'(\d{1,3}(?:[\s\xa0]?\d{3})*[,\.]\d{2})\s*(?:zł|PLN|złotych)?',
             r'(?:brutto|netto|razem|suma|do zapłaty)[:\s]*(\d{1,3}(?:[\s\xa0]?\d{3})*[,\.]\d{2})',
             r'(\d+[,\.]\d{2})\s*(?:zł|PLN)',
+            # XML patterns
+            r'<TotalGrossAmount>([^<]+)</TotalGrossAmount>',
+            r'<TotalNetAmount>([^<]+)</TotalNetAmount>',
+            r'<TotalVATAmount>([^<]+)</TotalVATAmount>',
+            r'<GrossAmount>([^<]+)</GrossAmount>',
+            r'<NetAmount>([^<]+)</NetAmount>',
+            r'<VATAmount>([^<]+)</VATAmount>',
+            r'<UnitPrice>([^<]+)</UnitPrice>',
         ]
 
         results = []
@@ -127,18 +135,38 @@ class BaseOCRProcessor(ABC):
 
     def _find_dates(self, text: str) -> List[str]:
         """Znajduje daty w tekście."""
-        patterns = [
+        # XML patterns first (higher priority)
+        xml_patterns = [
+            r'<IssueDate>([^<]+)</IssueDate>',
+            r'<issue_date>([^<]+)</issue_date>',
+            r'<DataWystawienia>([^<]+)</DataWystawienia>',
+            r'<DataWystaw>([^<]+)</DataWystaw>',
+        ]
+        
+        # General patterns (lower priority)
+        general_patterns = [
             r'\b(\d{2}[-\.\/]\d{2}[-\.\/]\d{4})\b',  # DD-MM-YYYY
             r'\b(\d{4}[-\.\/]\d{2}[-\.\/]\d{2})\b',  # YYYY-MM-DD
             r'\b(\d{2}[-\.\/]\d{2}[-\.\/]\d{2})\b',  # DD-MM-YY
         ]
 
         results = []
-        for pattern in patterns:
+        
+        # Check XML patterns first
+        for pattern in xml_patterns:
             matches = re.findall(pattern, text)
             for match in matches:
                 if match not in results:
                     results.append(match)
+        
+        # Then check general patterns
+        for pattern in general_patterns:
+            matches = re.findall(pattern, text)
+            for match in matches:
+                # Skip dates that look like they're from XML namespaces
+                if not match.startswith('http://') and not match.startswith('2023/06/29'):
+                    if match not in results:
+                        results.append(match)
 
         return results
 
@@ -149,6 +177,12 @@ class BaseOCRProcessor(ABC):
             r'(?:numer|nr)[:\s]*([A-Z]{1,3}[\s\/\-]?\d{1,4}[\s\/\-]?\d{2,4}[\s\/\-]?\d{2,6})',
             r'(FV[\s\/\-]?\d+[\s\/\-]?\d*[\s\/\-]?\d*)',
             r'(F[\s\/\-]?\d+[\s\/\-]?\d{4})',
+            # XML patterns
+            r'<InvoiceNumber>([^<]+)</InvoiceNumber>',
+            r'<invoice_number>([^<]+)</invoice_number>',
+            r'<FakturaNumer>([^<]+)</FakturaNumer>',
+            r'<ReceiptNumber>([^<]+)</ReceiptNumber>',
+            r'<receipt_number>([^<]+)</receipt_number>',
         ]
 
         results = []
