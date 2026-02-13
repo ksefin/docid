@@ -1,0 +1,27 @@
+# Binary files
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.gif binary
+*.pdf binary
+*.ico binary
+*.svg binary
+
+# Image files should not be diffed
+*.jpg -diff
+*.jpeg -diff
+*.png -diff
+*.gif -diff
+*.pdf -diff
+*.ico -diff
+*.svg -diff
+
+# Text files
+*.txt text
+*.md text
+*.py text
+*.yml text
+*.yaml text
+*.json text
+*.xml text
+*.html text
