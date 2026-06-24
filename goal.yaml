@@ -225,21 +225,21 @@ strategies:
   python:
     test: pytest tests/ -v
     build: python -m build
-    publish: twine upload dist/goal-{version}*
+    publish: twine upload dist/docid-{version}*
     dependencies:
       file: requirements.txt
       lock: pip freeze > requirements.txt
   nodejs:
     test: npm test
     build: npm run build
-    publish: npm publish
+    publish: twine upload dist/docid-{version}*
     dependencies:
       file: package-lock.json
       lock: npm install
   rust:
     test: cargo test
     build: cargo build --release
-    publish: cargo publish
+    publish: twine upload dist/docid-{version}*
     dependencies:
       file: Cargo.lock
       lock: cargo update

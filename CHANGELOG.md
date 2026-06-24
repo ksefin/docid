@@ -1,3 +1,19 @@
+## [Unreleased]
+
+## [0.1.10] - 2026-06-24
+
+### Docs
+- Update README.md
+
+### Test
+- Update tests/test_visual_fingerprint.py
+
+### Other
+- Update .env.example
+- Update docid/__init__.py
+- Update docid/cli.py
+- Update docid/visual_fingerprint.py
+
 ## [0.1.8] - 2026-02-13
 
 ### Summary

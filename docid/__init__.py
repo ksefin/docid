@@ -27,7 +27,7 @@ Wymagania:
     pip install pytesseract pdf2image pillow
 """
 
-__version__ = "0.1.6"
+__version__ = "0.1.10"
 __author__ = "Softreck"
 
 # Główne API
@@ -80,6 +80,19 @@ from .pipeline import (
     verify_document_id,
 )
 
+# Wizualny odcisk dokumentu (identyfikacja graficzna przed OCR)
+from .visual_fingerprint import (
+    VisualFingerprint,
+    VisualMatch,
+    FieldSource,
+    compute_fingerprint,
+    find_best_match,
+    hamming_distance,
+    similarity,
+    merge_records,
+    DEFAULT_MAX_DISTANCE,
+)
+
 __all__ = [
     # Wersja
     '__version__',
@@ -126,4 +139,15 @@ __all__ = [
     'generate_universal_document_id',
     'verify_universal_document_id',
     'compare_universal_documents',
+
+    # Wizualny odcisk dokumentu
+    'VisualFingerprint',
+    'VisualMatch',
+    'FieldSource',
+    'compute_fingerprint',
+    'find_best_match',
+    'hamming_distance',
+    'similarity',
+    'merge_records',
+    'DEFAULT_MAX_DISTANCE',
 ]

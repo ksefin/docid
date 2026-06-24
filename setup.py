@@ -9,9 +9,9 @@ long_description = (this_directory / "README.md").read_text(encoding='utf-8')
 
 setup(
     name="docid",
-    version="0.1.0",
-    author="Softreck",
-    author_email="info@softreck.dev",
+    version="0.1.10",
+    author="Tom Sapletta",
+    author_email="tom@sapletta.com",
     description="Deterministyczny generator identyfikatorów dokumentów z OCR",
     long_description=long_description,
     long_description_content_type="text/markdown",

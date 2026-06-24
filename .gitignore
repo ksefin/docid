@@ -1,3 +1,4 @@
+.env.example
 package-lock.json
 .idea
 test_emails

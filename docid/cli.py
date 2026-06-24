@@ -265,6 +265,48 @@ def cmd_generate_id(args):
     print(doc_id)
 
 
+def cmd_visual(args):
+    """Wizualny odcisk obrazu i porównanie podobieństwa (przed OCR)."""
+    from .visual_fingerprint import compute_fingerprint, find_best_match
+
+    target = compute_fingerprint(args.image)
+    if target is None:
+        logger.error(f"Nie udało się policzyć odcisku dla: {args.image}")
+        sys.exit(1)
+
+    if not args.against:
+        info = target.to_dict()
+        print(f"phash={info['phash']} dhash={info['dhash']} ahash={info['ahash']}")
+        print(f"quality={info['qualityScore']} ({info['width']}x{info['height']})")
+        return
+
+    # Porównaj z już zeskanowanymi obrazami i wskaż najbardziej podobne.
+    candidates = []
+    for path in args.against:
+        fp = compute_fingerprint(path)
+        if fp is not None:
+            candidates.append((path, fp))
+
+    print(f"Cel: {args.image} (quality={target.quality_score:.2f})")
+    rows = []
+    for path, fp in candidates:
+        dist = target.distance(fp)
+        same = target.matches(fp, max_distance=args.max_distance)
+        rows.append((dist if dist is not None else 999, same, path))
+    rows.sort(key=lambda r: r[0])
+    for dist, same, path in rows:
+        sim = max(0.0, 1.0 - dist / 64.0) * 100
+        flag = "✅ TEN SAM" if same else "  różny"
+        print(f"  {flag}  dist={dist:>2}  ~{sim:5.1f}%  {path}")
+
+    best = find_best_match(target, candidates, max_distance=args.max_distance)
+    if best is not None:
+        pct = best.similarity * 100
+        print(f"\nNajlepsze dopasowanie: {best.key}  (dist={best.distance}, ~{pct:.1f}%)")
+    else:
+        print("\nBrak dopasowania w progu — prawdopodobnie nowy dokument.")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='DOC Document ID Generator - deterministyczne ID dokumentów z OCR',
@@ -326,6 +368,16 @@ def main():
     p_gen.add_argument('--amount', help='Kwota brutto')
     p_gen.add_argument('--prefix', default='DOC', help='Prefiks ID')
     p_gen.set_defaults(func=cmd_generate_id)
+
+    # visual - graficzna identyfikacja przed OCR
+    p_visual = subparsers.add_parser('visual',
+                                     help='Wizualny odcisk i podobieństwo obrazów (przed OCR)')
+    p_visual.add_argument('image', help='Obraz do odcisku / porównania')
+    p_visual.add_argument('against', nargs='*',
+                         help='Obrazy już zeskanowane do porównania podobieństwa')
+    p_visual.add_argument('--max-distance', type=int, default=6,
+                         help='Maks. odległość Hamminga dla "ten sam dokument" (domyślnie 6)')
+    p_visual.set_defaults(func=cmd_visual)
 
     args = parser.parse_args()
 
