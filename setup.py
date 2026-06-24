@@ -9,7 +9,7 @@ long_description = (this_directory / "README.md").read_text(encoding='utf-8')
 
 setup(
     name="docid",
-    version="0.1.10",
+    version="0.1.11",
     author="Tom Sapletta",
     author_email="tom@sapletta.com",
     description="Deterministyczny generator identyfikatorów dokumentów z OCR",

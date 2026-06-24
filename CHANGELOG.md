@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+## [0.1.11] - 2026-06-24
+
+### Docs
+- Update README.md
+
+### Other
+- Update docid/visual_fingerprint.py
+
 ## [0.1.10] - 2026-06-24
 
 ### Docs

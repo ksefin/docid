@@ -27,7 +27,7 @@ Wymagania:
     pip install pytesseract pdf2image pillow
 """
 
-__version__ = "0.1.10"
+__version__ = "0.1.11"
 __author__ = "Softreck"
 
 # Główne API

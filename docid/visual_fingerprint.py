@@ -186,7 +186,7 @@ def _load_grayscale(source: Union[str, Path, "Image.Image"]) -> "Image.Image":
 
 def _ahash(gray: "Image.Image") -> str:
     small = gray.resize((8, 8), Image.Resampling.LANCZOS)
-    pixels = list(small.getdata())
+    pixels = list(small.tobytes())
     avg = sum(pixels) / len(pixels)
     return _bits_to_hex([1 if p >= avg else 0 for p in pixels])
 
@@ -194,7 +194,7 @@ def _ahash(gray: "Image.Image") -> str:
 def _dhash(gray: "Image.Image") -> str:
     # 9x8 -> porównanie sąsiadów w poziomie -> 8x8 bitów
     small = gray.resize((9, 8), Image.Resampling.LANCZOS)
-    pixels = list(small.getdata())
+    pixels = list(small.tobytes())
     bits: List[int] = []
     for row in range(8):
         for col in range(8):
@@ -220,7 +220,7 @@ def _phash(gray: "Image.Image") -> str:
         return _bits_to_hex(bits)
 
     # Fallback czysto-Pythonowy (wolny, ale poprawny)
-    pixels = list(small.getdata())
+    pixels = list(small.tobytes())
     matrix = [pixels[r * size:(r + 1) * size] for r in range(size)]
     dct = _dct2_py(matrix, size)
     block = [dct[r][c] for r in range(8) for c in range(8)]
@@ -271,7 +271,7 @@ def _quality_metrics(gray: "Image.Image") -> Tuple[float, float, float]:
         sharpness = float(gx.var() + gy.var())
         contrast = float(arr.std())
     else:  # pragma: no cover
-        pixels = list(work.getdata())
+        pixels = list(work.tobytes())
         w, h = work.size
         mean = sum(pixels) / len(pixels)
         contrast = (sum((p - mean) ** 2 for p in pixels) / len(pixels)) ** 0.5
