@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "docid"
-version = "0.1.11"
+version = "0.1.12"
 description = "Deterministic document identifier generator utilizing OCR (PaddleOCR, Tesseract) to generate consistent IDs for invoices and financial documents regardless of source format (PDF, JPG, XML)."
 readme = "README.md"
 license = "Apache-2.0"

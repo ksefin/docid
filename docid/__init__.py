@@ -27,7 +27,7 @@ Wymagania:
     pip install pytesseract pdf2image pillow
 """
 
-__version__ = "0.1.11"
+__version__ = "0.1.12"
 __author__ = "Softreck"
 
 # Główne API
@@ -93,6 +93,28 @@ from .visual_fingerprint import (
     DEFAULT_MAX_DISTANCE,
 )
 
+# Deduplikacja dokumentów używana przez konektory URI i dashboardy
+from .dedup import (
+    FINGERPRINT_DISTINCT_FIELDS,
+    FINGERPRINT_MIN_MATCH,
+    METADATA_UNKNOWN,
+    VISUAL_NEAR_DISTANCE,
+    VISUAL_STRONG_DISTANCE,
+    dhash_distance,
+    document_id,
+    document_matches,
+    document_signature,
+    evaluate,
+    find_duplicate,
+    fingerprint_match_count,
+    image_dhash,
+    image_phash,
+    metadata_completeness,
+    normalize_text,
+    reconcile,
+    transaction_fingerprint,
+)
+
 __all__ = [
     # Wersja
     '__version__',
@@ -150,4 +172,24 @@ __all__ = [
     'similarity',
     'merge_records',
     'DEFAULT_MAX_DISTANCE',
+
+    # Deduplikacja dokumentów
+    'FINGERPRINT_DISTINCT_FIELDS',
+    'FINGERPRINT_MIN_MATCH',
+    'METADATA_UNKNOWN',
+    'VISUAL_NEAR_DISTANCE',
+    'VISUAL_STRONG_DISTANCE',
+    'dhash_distance',
+    'document_id',
+    'document_matches',
+    'document_signature',
+    'evaluate',
+    'find_duplicate',
+    'fingerprint_match_count',
+    'image_dhash',
+    'image_phash',
+    'metadata_completeness',
+    'normalize_text',
+    'reconcile',
+    'transaction_fingerprint',
 ]

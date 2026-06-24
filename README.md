@@ -3,10 +3,10 @@
 
 ## AI Cost Tracking
 
-![PyPI](https://img.shields.io/badge/pypi-costs-blue) ![Version](https://img.shields.io/badge/version-0.1.11-blue) ![Python](https://img.shields.io/badge/python-3.9+-blue) ![License](https://img.shields.io/badge/license-Apache--2.0-green)
+![PyPI](https://img.shields.io/badge/pypi-costs-blue) ![Version](https://img.shields.io/badge/version-0.1.12-blue) ![Python](https://img.shields.io/badge/python-3.9+-blue) ![License](https://img.shields.io/badge/license-Apache--2.0-green)
 ![AI Cost](https://img.shields.io/badge/AI%20Cost-$0.63-orange) ![Human Time](https://img.shields.io/badge/Human%20Time-3.0h-blue) ![Model](https://img.shields.io/badge/Model-openrouter%2Fqwen%2Fqwen3--coder--next-lightgrey)
 
-- 🤖 **LLM usage:** $0.6285 (2 commits)
+- 🤖 **LLM usage:** $0.6301 (3 commits)
 - 👤 **Human dev:** ~$300 (3.0h @ $100/h, 30min dedup)
 
 Generated on 2026-06-24 using [openrouter/qwen/qwen3-coder-next](https://openrouter.ai/qwen/qwen3-coder-next)
@@ -147,6 +147,35 @@ print(doc_id)  # DOC-PAR-8142B3FC69D7778C
 is_valid = verify_document_id("skan.png", "DOC-FV-F0BE35240C77B2DB")
 print(is_valid)  # True/False
 ```
+
+### Deduplikacja skanów i paragonów
+
+Wspólna logika deduplikacji jest w `docid.dedup`, żeby konektory URI,
+dashboardy i skrypty nie kopiowały własnych wersji fingerprintu.
+
+```python
+from docid.dedup import document_signature, evaluate, reconcile
+
+candidate = {
+    "docId": "DOC-NEW",
+    **document_signature(
+        text=ocr_text,
+        image="scan-crop.jpg",
+        metadata={"type": "rachunek", "amount": "30.26"},
+    ),
+    "metadata": {"type": "rachunek", "amount": "30.26"},
+}
+
+decision = evaluate(candidate, archived_documents)
+print(decision["action"])  # new | duplicate | supersede
+
+groups = reconcile(archived_documents)
+```
+
+`docid.dedup` łączy stabilne tokeny OCR (numer rachunku/faktury, kod
+autoryzacji, godzina, końcówka karty) z wizualnym odciskiem `dHash` + `pHash`
+z `docid.visual_fingerprint`. Dzięki temu ponowny skan tego samego fizycznego
+dokumentu nie tworzy duplikatu, nawet gdy OCR częściowo się rozjedzie.
 
 ## 🖥️ Interfejs CLI (docid-universal)
 
