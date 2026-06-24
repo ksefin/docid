@@ -32,6 +32,25 @@ VISUAL_STRONG_DISTANCE = 6
 # Distinctive fields that must agree for a confident fingerprint-only match.
 FINGERPRINT_MIN_MATCH = 2
 
+# Business key for receipts that carry no transaction token (cash receipts): the
+# merchant + calendar date + grand total + currency. It is the only stable identity
+# signal for such documents, so it is used -- corroborated, never alone -- to collapse
+# re-scans that differ in framing (visual hashes too far apart) and OCR text.
+BUSINESS_KEY_FIELDS = ("contractor", "date", "amount", "currency")
+
+# Corroboration for a business-key match: monetary tokens (line-item prices + totals)
+# are far more OCR-stable than words, so two scans of one receipt share most amounts.
+# Require both a minimum count of shared amounts and a minimum Jaccard so that two
+# distinct receipts that merely share a grand total do not collapse together.
+MONEY_OVERLAP_MIN_SHARED = 3
+MONEY_OVERLAP_MIN_JACCARD = 0.4
+
+# Visual corroboration distance for the business-key path. Looser than the standalone
+# VISUAL_NEAR_DISTANCE because the exact merchant + date + total + currency match is
+# already a strong gate, so the images only need to be roughly the same layout (a hand
+# re-scan that drifted just past the strict threshold, e.g. the real ORLEN pair at 11).
+BUSINESS_KEY_VISUAL_NEAR = 14
+
 METADATA_UNKNOWN = {"", "nieznana", "kwota-nieznana", "unknown", "kontrahent-nieznany", "ina-gruba"}
 
 
@@ -71,6 +90,26 @@ def transaction_fingerprint(text: str) -> dict[str, str]:
     card = re.search(r"\b(\d{4})\b\s*wa\w?zna\s*do", low)
     if card:
         fp["card"] = card.group(1)
+
+    # Full transaction timestamp (date + time). Distinctive for non-terminal fiscal
+    # receipts that lack RACHUNEK NR / AUTORYZACJI. Encoded as YYYYMMDDHHMM[SS]; the
+    # trailing SS marks second resolution, which `document_matches` treats as a
+    # high-precision standalone match (a full-second timestamp collision across two
+    # different receipts is effectively impossible).
+    ymd = ""
+    iso = re.search(r"\b(20\d{2})[-./](\d{2})[-./](\d{2})\b", raw)
+    if iso:
+        ymd = f"{iso.group(1)}{iso.group(2)}{iso.group(3)}"
+    else:
+        dmy = re.search(r"\b(\d{2})[-./](\d{2})[-./](20\d{2})\b", raw)
+        if dmy:
+            ymd = f"{dmy.group(3)}{dmy.group(2)}{dmy.group(1)}"
+    hm = re.search(r"\b([0-2]?\d):([0-5]\d)(?::([0-5]\d))?\b", raw)
+    if ymd and hm:
+        stamp = f"{ymd}{int(hm.group(1)):02d}{hm.group(2)}"
+        if hm.group(3):
+            stamp += hm.group(3)
+        fp["datetime"] = stamp
     return fp
 
 
@@ -169,6 +208,55 @@ def document_id(path: str | Path, ocr_text: str, *, normalized_text: str | None 
     return result
 
 
+def _meta_value(doc: dict[str, Any] | None, field: str) -> str:
+    """Read a metadata field from a document, top-level or under ``metadata``."""
+    if not isinstance(doc, dict):
+        return ""
+    value = doc.get(field)
+    if (value is None or str(value).strip() == "") and isinstance(doc.get("metadata"), dict):
+        value = doc["metadata"].get(field)
+    return str(value or "").strip().lower()
+
+
+def business_key(doc: dict[str, Any] | None) -> tuple[str, str, str, str] | None:
+    """Return ``(contractor, date, amount, currency)`` when all are present and
+    meaningful, else ``None``.
+
+    Reads either top-level fields (archive records) or a nested ``metadata`` dict
+    (candidate objects). Returns ``None`` if the merchant or total amount is missing or
+    a known placeholder, since the key would not then identify a specific receipt.
+    """
+    contractor = _meta_value(doc, "contractor")
+    if not contractor or contractor in METADATA_UNKNOWN:
+        return None
+    date = _meta_value(doc, "date")
+    if not date:
+        return None
+    amount = _meta_value(doc, "amount")
+    if not amount or amount in METADATA_UNKNOWN:
+        return None
+    return (contractor, date, amount, _meta_value(doc, "currency"))
+
+
+def money_tokens(text: str) -> set[str]:
+    """Monetary amounts (``n.dd``) found in OCR text, comma normalized to a dot.
+
+    More OCR-stable than words: a shared set of line-item prices and totals corroborates
+    that two scans are the same physical receipt.
+    """
+    return {m.replace(",", ".") for m in re.findall(r"\d{1,4}[.,]\d{2}", text or "")}
+
+
+def money_overlap(a_text: str, b_text: str) -> tuple[int, float]:
+    """Return ``(shared_count, jaccard)`` of the monetary tokens in two OCR texts."""
+    a, b = money_tokens(a_text), money_tokens(b_text)
+    if not a or not b:
+        return 0, 0.0
+    shared = a & b
+    union = a | b
+    return len(shared), (len(shared) / len(union) if union else 0.0)
+
+
 def document_matches(
     existing: dict[str, Any],
     *,
@@ -178,6 +266,8 @@ def document_matches(
     fingerprint: dict[str, Any] | None = None,
     dhash: str = "",
     phash: str = "",
+    metadata: dict[str, Any] | None = None,
+    text: str = "",
 ) -> str:
     """Return a non-empty reason if ``existing`` is the same document."""
     fingerprint = fingerprint or {}
@@ -187,6 +277,12 @@ def document_matches(
         return "sourceSha256"
     if text_sha256 and existing.get("textSha256") == text_sha256:
         return "textSha256"
+    # A full second-resolution transaction timestamp (date + HH:MM:SS) uniquely
+    # identifies a transaction, so it stands alone even with no other token.
+    cand_dt = str(fingerprint.get("datetime") or "")
+    exist_dt = str((existing.get("fingerprint") or {}).get("datetime") or "")
+    if cand_dt and cand_dt == exist_dt and len(cand_dt) >= 14:
+        return "datetime"
     matches = fingerprint_match_count(fingerprint, existing.get("fingerprint"))
     if matches >= FINGERPRINT_MIN_MATCH:
         return f"fingerprint:{matches}"
@@ -200,6 +296,20 @@ def document_matches(
         d_dhash = dhash_distance(dhash, edhash) if (dhash and edhash) else 0
         if d_phash <= VISUAL_STRONG_DISTANCE and d_dhash <= VISUAL_STRONG_DISTANCE:
             return "visual-strong"
+
+    # Cash receipts carry no transaction token and a hand re-scan rarely lands within the
+    # strict visual threshold, so none of the signals above can collapse them. Fall back to
+    # the merchant + date + total + currency business key, but only when it is corroborated
+    # -- by a strongly overlapping set of monetary tokens (same line items) or by visually
+    # near images -- so two distinct receipts sharing only a grand total stay separate.
+    cand_key = business_key(metadata)
+    if cand_key is not None and cand_key == business_key(existing):
+        shared, jaccard = money_overlap(text, str(existing.get("text") or ""))
+        money_corroborated = shared >= MONEY_OVERLAP_MIN_SHARED and jaccard >= MONEY_OVERLAP_MIN_JACCARD
+        edhash = str(existing.get("dhash") or "")
+        visual_corroborated = bool(dhash and edhash and dhash_distance(dhash, edhash) <= BUSINESS_KEY_VISUAL_NEAR)
+        if money_corroborated or visual_corroborated:
+            return "business-key"
     return ""
 
 
@@ -212,6 +322,8 @@ def find_duplicate(
     fingerprint: dict[str, Any] | None = None,
     dhash: str = "",
     phash: str = "",
+    metadata: dict[str, Any] | None = None,
+    text: str = "",
 ) -> dict[str, Any] | None:
     """Find an already-known document that is the same as the incoming scan."""
     match: dict[str, Any] | None = None
@@ -226,6 +338,8 @@ def find_duplicate(
             fingerprint=fingerprint,
             dhash=dhash,
             phash=phash,
+            metadata=metadata,
+            text=text,
         )
         if reason:
             match = {**item, "matchReason": reason}
@@ -243,10 +357,17 @@ def evaluate(candidate: dict[str, Any], documents: list[Any]) -> dict[str, Any]:
         fingerprint=candidate.get("fingerprint") or {},
         dhash=str(candidate.get("dhash") or ""),
         phash=str(candidate.get("phash") or ""),
+        metadata=candidate,
+        text=str(candidate.get("text") or ""),
     )
     if not match:
         return {"action": "new", "reason": "", "match": None}
-    new_score = metadata_completeness(candidate.get("metadata"))
+    # Read completeness from a nested metadata dict when present, else the record itself,
+    # symmetrically for both sides -- otherwise a top-level-field archive record (no nested
+    # "metadata") always scores 0 on the candidate side and a better re-scan could never
+    # supersede the worse archived one.
+    new_meta = candidate.get("metadata") if isinstance(candidate.get("metadata"), dict) else candidate
+    new_score = metadata_completeness(new_meta)
     old_meta = match.get("metadata") if isinstance(match.get("metadata"), dict) else match
     old_score = metadata_completeness(old_meta)
     action = "supersede" if new_score > old_score else "duplicate"
@@ -280,6 +401,8 @@ def reconcile(documents: list[Any]) -> list[dict[str, Any]]:
                 fingerprint=docs[i].get("fingerprint") or {},
                 dhash=str(docs[i].get("dhash") or ""),
                 phash=str(docs[i].get("phash") or ""),
+                metadata=docs[i],
+                text=str(docs[i].get("text") or ""),
             )
             # docId equality alone is not physical duplicate evidence.
             if reason and reason != "docId":

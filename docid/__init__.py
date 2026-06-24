@@ -27,7 +27,7 @@ Wymagania:
     pip install pytesseract pdf2image pillow
 """
 
-__version__ = "0.1.12"
+__version__ = "0.1.13"
 __author__ = "Softreck"
 
 # Główne API
@@ -95,11 +95,16 @@ from .visual_fingerprint import (
 
 # Deduplikacja dokumentów używana przez konektory URI i dashboardy
 from .dedup import (
+    BUSINESS_KEY_FIELDS,
+    BUSINESS_KEY_VISUAL_NEAR,
     FINGERPRINT_DISTINCT_FIELDS,
     FINGERPRINT_MIN_MATCH,
     METADATA_UNKNOWN,
+    MONEY_OVERLAP_MIN_JACCARD,
+    MONEY_OVERLAP_MIN_SHARED,
     VISUAL_NEAR_DISTANCE,
     VISUAL_STRONG_DISTANCE,
+    business_key,
     dhash_distance,
     document_id,
     document_matches,
@@ -110,6 +115,8 @@ from .dedup import (
     image_dhash,
     image_phash,
     metadata_completeness,
+    money_overlap,
+    money_tokens,
     normalize_text,
     reconcile,
     transaction_fingerprint,
@@ -174,11 +181,16 @@ __all__ = [
     'DEFAULT_MAX_DISTANCE',
 
     # Deduplikacja dokumentów
+    'BUSINESS_KEY_FIELDS',
+    'BUSINESS_KEY_VISUAL_NEAR',
     'FINGERPRINT_DISTINCT_FIELDS',
     'FINGERPRINT_MIN_MATCH',
     'METADATA_UNKNOWN',
+    'MONEY_OVERLAP_MIN_JACCARD',
+    'MONEY_OVERLAP_MIN_SHARED',
     'VISUAL_NEAR_DISTANCE',
     'VISUAL_STRONG_DISTANCE',
+    'business_key',
     'dhash_distance',
     'document_id',
     'document_matches',
@@ -189,6 +201,8 @@ __all__ = [
     'image_dhash',
     'image_phash',
     'metadata_completeness',
+    'money_overlap',
+    'money_tokens',
     'normalize_text',
     'reconcile',
     'transaction_fingerprint',

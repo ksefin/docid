@@ -1,5 +1,18 @@
 ## [Unreleased]
 
+## [0.1.13] - 2026-06-24
+
+### Docs
+- Update README.md
+
+### Test
+- Update tests/test_dedup.py
+
+### Other
+- Update docid/__init__.py
+- Update docid/dedup.py
+- Update docid/pipeline.py
+
 ## [0.1.12] - 2026-06-24
 
 ### Docs

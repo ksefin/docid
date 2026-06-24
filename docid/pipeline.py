@@ -213,11 +213,14 @@ class DocumentPipeline:
         is_duplicate = False
         duplicate_of = None
 
-        if canonical_string in self._processed_ids:
+        prior_id = self._processed_ids.get(canonical_string)
+        if prior_id and prior_id != document_id:
             is_duplicate = True
-            duplicate_of = self._processed_ids[canonical_string]
+            duplicate_of = prior_id
             logger.warning(f"Duplicate detected: {document_id} is duplicate of {duplicate_of}")
         else:
+            # First time seen, or the same document re-processed (same canonical -> same
+            # id): re-seeing one document is not a duplicate of a distinct prior document.
             self._processed_ids[canonical_string] = document_id
 
         return ProcessedDocument(
